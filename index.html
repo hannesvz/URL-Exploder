@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>URL Exploder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Fira+Code:wght@300..700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* dark mode (default) */
+      --background: #020617;
+      --card: #0f172a;
+      --muted: #0f172a;
+      --muted-2: #1e293b;
+      --border: #1e293b;
+      --foreground: #f8fafc;
+      --muted-foreground: #94a3b8;
+      --primary: #38bdf8;
+
+      /* component palette — fixed across modes */
+      --url-color-1: #93c5fd; /* protocol  */
+      --url-color-2: #6ee7b7; /* authority */
+      --url-color-3: #d8b4fe; /* path      */
+      --url-color-4: #fdba74; /* query     */
+      --url-color-5: #fca5a5; /* fragment  */
+      --url-color-6: #fde047;
+      --url-color-7: #f9a8d4;
+      --url-color-8: #94a3b8;
+      --url-color-9: #5eead4;
+      --url-color-10: #f8fafc;
+
+      --radius: 1rem;
+      --font-sans: Inter, system-ui, sans-serif;
+      --font-mono: 'Fira Code', ui-monospace, monospace;
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html[data-theme="light"] {
+      --background: #f8fafc;
+      --card: #ffffff;
+      --muted: #f1f5f9;
+      --muted-2: #e2e8f0;
+      --border: #e2e8f0;
+      --foreground: #334155;
+      --muted-foreground: #64748b;
+      --primary: #0ea5e9;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+    }
+    body { display: flex; flex-direction: column; }
+
+    /* ------- header / nav ------- */
+    nav.topbar {
+      width: 100%;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.5rem;
+      position: sticky; top: 0;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+    .logo { display: flex; align-items: center; gap: .75rem; cursor: pointer; user-select: none; }
+    .logo-mark {
+      width: 2.5rem; height: 2.5rem;
+      background: color-mix(in oklab, var(--primary) 10%, transparent);
+      border-radius: .75rem;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--primary);
+    }
+    .logo h1 {
+      font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em;
+      margin: 0; color: var(--foreground);
+    }
+    .theme-toggle {
+      width: 2.5rem; height: 2.5rem;
+      border-radius: .75rem;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--foreground);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .theme-toggle:hover { background: var(--muted); }
+    .theme-toggle .sun { display: none; }
+    html[data-theme="light"] .theme-toggle .moon { display: none; }
+    html[data-theme="light"] .theme-toggle .sun { display: block; }
+
+    /* ------- input bar ------- */
+    header.inputbar {
+      width: 100%;
+      background: color-mix(in oklab, var(--card) 80%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem;
+      position: sticky; top: 73px;
+      z-index: 50;
+    }
+    header.inputbar input {
+      width: 100%;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: .75rem;
+      padding: 1rem 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 1.125rem;
+      font-weight: 500;
+      color: var(--foreground);
+      outline: none;
+      transition: var(--transition);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.04);
+    }
+    header.inputbar input::placeholder {
+      color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    }
+    header.inputbar input:focus {
+      border-color: color-mix(in oklab, var(--primary) 50%, transparent);
+      box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 10%, transparent);
+    }
+
+    /* ------- main layout ------- */
+    main { display: flex; flex-direction: column; flex: 1; width: 100%; }
+    @media (min-width: 1024px) { main { flex-direction: row; } }
+
+    /* left: breakdown */
+    .breakdown {
+      width: 100%;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 3rem;
+      background: var(--background);
+    }
+    @media (min-width: 768px)  { .breakdown { padding: 3rem; } }
+    @media (min-width: 1024px) { .breakdown { width: 50%; } }
+
+    .section { display: flex; flex-direction: column; gap: 1.5rem; }
+    .section-header { display: flex; align-items: center; gap: 1rem; }
+    .section-label {
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+    }
+    .section-rule { flex: 1; height: 1px; background: color-mix(in oklab, var(--border) 50%, transparent); }
+
+    .row {
+      display: flex; flex-direction: row; align-items: baseline; gap: 1.5rem;
+      width: 100%;
+      cursor: pointer;
+      transition: var(--transition);
+      border-radius: .5rem;
+      padding: .25rem .5rem;
+    }
+    .row:hover, .row:focus-visible, .row.active {
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
+      outline: none;
+    }
+    .row-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      font-weight: 700;
+      width: 6rem;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .row-label.invisible { opacity: 0; }
+    .row-value {
+      font-family: Inter, sans-serif;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      font-size: 2.25rem;
+      line-height: 1.05;
+      word-break: break-all;
+    }
+    @media (min-width: 768px) { .row-value { font-size: 4.5rem; } }
+    .row-value.small { font-size: 1.875rem; }
+    @media (min-width: 768px) { .row-value.small { font-size: 3rem; } }
+
+    .group { display: flex; flex-direction: column; gap: 1rem; }
+
+    .placeholder-msg {
+      font-family: var(--font-mono);
+      color: var(--muted-foreground);
+      font-size: 0.95rem;
+      padding: .5rem;
+    }
+    .invalid-msg {
+      display: flex; flex-direction: column; gap: .75rem;
+      padding: 1.5rem 1.25rem;
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
+      border: 1px dashed var(--border);
+      border-radius: 1rem;
+      color: var(--foreground);
+    }
+    .invalid-msg strong {
+      font-size: 1rem; font-weight: 700;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .invalid-msg strong svg { color: var(--url-color-5); }
+    .invalid-msg p {
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .invalid-msg code {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      background: var(--background);
+      padding: .15rem .4rem;
+      border-radius: .35rem;
+      border: 1px solid var(--border);
+    }
+
+    /* right: info pane */
+    .info-pane {
+      flex: 1;
+      display: flex;
+      padding: 2rem;
+      background: color-mix(in oklab, var(--muted) 30%, transparent);
+      border-top: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    @media (min-width: 768px)  { .info-pane { padding: 3rem; } }
+    @media (min-width: 1024px) { .info-pane { border-top: 0; border-left: 1px solid var(--border); } }
+
+    .info-box {
+      background: var(--card);
+      border: 2px solid var(--url-color-1);
+      padding: 3rem;
+      border-radius: 1.25rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+      transition: border-color .25s cubic-bezier(0.4,0,0.2,1);
+    }
+    .info-head { display: flex; align-items: center; gap: 1.5rem; }
+    .accent-bar {
+      width: 0.625rem;
+      height: 3rem;
+      border-radius: 9999px;
+      background: var(--url-color-1);
+      transition: background-color .25s cubic-bezier(0.4,0,0.2,1);
+    }
+    .info-title {
+      font-size: 3rem;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+    @media (max-width: 640px) { .info-title { font-size: 2rem; } }
+
+    .info-body { display: flex; flex-direction: column; gap: 2.5rem; flex: 1; }
+
+    .active-component {
+      background: var(--background);
+      padding: 2rem;
+      border-radius: 1.25rem;
+      border: 1px solid var(--border);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .label-tiny {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      color: var(--muted-foreground);
+      font-weight: 700;
+      display: block;
+      margin-bottom: 1rem;
+    }
+    .info-value {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1.5rem;
+      letter-spacing: -0.02em;
+      word-break: break-all;
+      color: var(--foreground);
+      margin: 0;
+    }
+    .info-value.muted {
+      color: var(--muted-foreground);
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    .breakdown-grid { display: flex; flex-direction: column; gap: .75rem; }
+    .breakdown-item {
+      display: flex; align-items: center; gap: 1rem;
+      padding: .9rem 1rem;
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+      border: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+      border-radius: .75rem;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+    }
+    .badge {
+      padding: .375rem .75rem;
+      background: var(--background);
+      border-radius: .5rem;
+      border: 1px solid var(--border);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      flex-shrink: 0;
+    }
+    .breakdown-item .val { word-break: break-all; flex: 1; }
+    .breakdown-item .desc {
+      margin-left: auto;
+      color: var(--muted-foreground);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+
+    .info-desc {
+      font-size: 1.05rem;
+      color: color-mix(in oklab, var(--muted-foreground) 90%, var(--foreground));
+      line-height: 1.6;
+      max-width: 42rem;
+      font-weight: 500;
+      margin: 0;
+    }
+
+    .doc-links { display: flex; flex-wrap: wrap; gap: 1.25rem; padding-top: 1rem; }
+    .doc-link {
+      display: flex; align-items: center; gap: .75rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .doc-link-icon {
+      width: 2.25rem; height: 2.25rem;
+      border-radius: .5rem;
+      background: color-mix(in oklab, var(--primary) 10%, transparent);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .doc-link span small {
+      display: block;
+      font-size: 0.7rem;
+      opacity: 0.5;
+      font-weight: 400;
+      letter-spacing: normal;
+    }
+
+    .info-foot {
+      padding-top: 2rem;
+      border-top: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+      display: flex;
+    }
+    .info-foot .standard {
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      opacity: 0.4;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <div class="logo" tabindex="0">
+      <div class="logo-mark">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      </div>
+      <h1>URL Exploder</h1>
+    </div>
+    <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+      <svg class="moon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+      <svg class="sun" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+    </button>
+  </nav>
+
+  <header class="inputbar">
+    <input
+      id="url-input"
+      type="text"
+      placeholder="Paste URL..."
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+      value="https://alice:s3cret@cats.example.org.au:1234/stripes/fur.html?pattern=tabby&size=large#claws"
+    />
+  </header>
+
+  <main>
+    <section class="breakdown" id="breakdown"></section>
+
+    <aside class="info-pane">
+      <div class="info-box" id="info-box">
+        <div class="info-head">
+          <div class="accent-bar" id="accent-bar"></div>
+          <h2 class="info-title" id="info-title">Hover a component</h2>
+        </div>
+        <div class="info-body">
+          <div class="active-component">
+            <span class="label-tiny">Active Component</span>
+            <p class="info-value" id="info-value">—</p>
+          </div>
+          <div class="info-section" id="structure-section" style="display:none;">
+            <span class="label-tiny" id="structure-label">Structure Breakdown</span>
+            <div class="breakdown-grid" id="structure-grid"></div>
+          </div>
+          <div>
+            <span class="label-tiny">Documentation</span>
+            <p class="info-desc" id="info-desc">Hover any component on the left to see details, the spec it follows, and links to the relevant RFCs.</p>
+            <div class="doc-links" id="doc-links"></div>
+          </div>
+        </div>
+        <div class="info-foot">
+          <span class="standard" id="info-standard">RFC 3986 / WHATWG URL</span>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    /* ============================================================
+       URL Exploder
+       Parses the input via the WHATWG URL Standard (`new URL`).
+       If parsing fails, shows a friendly invalid-URL message.
+    ============================================================ */
+
+    /* ---------- theme ---------- */
+    const themeToggle = document.getElementById('theme-toggle');
+    const stored = localStorage.getItem('urlexploder-theme');
+    if (stored === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    themeToggle.addEventListener('click', () => {
+      const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      else document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('urlexploder-theme', next);
+    });
+
+    /* ---------- group → colour ---------- */
+    const COLOR = {
+      protocol:  'var(--url-color-1)', // scheme
+      authority: 'var(--url-color-2)', // userinfo + host + port
+      path:      'var(--url-color-3)',
+      query:     'var(--url-color-4)',
+      fragment:  'var(--url-color-5)',
+    };
+    const groupForKey = {
+      scheme:    'protocol',
+      username:  'authority',
+      password:  'authority',
+      userinfo:  'authority',
+      host:      'authority',
+      port:      'authority',
+      path:      'path',
+      query:     'query',
+      queryParam:'query',
+      fragment:  'fragment',
+    };
+
+    /* ---------- per-component descriptions / docs ---------- */
+    const INFO = {
+      scheme: {
+        title: 'Scheme',
+        description: 'The scheme identifies the protocol used to access the resource. Case-insensitive, canonically lowercase. WHATWG exposes it as url.protocol with a trailing colon. Schemes are registered with IANA.',
+        standard: 'RFC 3986 §3.1',
+        docs: [
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.1', label: 'RFC 3986', sub: 'Generic Syntax' },
+          { url: 'https://datatracker.ietf.org/doc/html/rfc9110#section-4.2', label: 'RFC 9110', sub: 'HTTP(S) Schemes' },
+          { url: 'https://www.iana.org/assignments/uri-schemes/', label: 'IANA', sub: 'URI Schemes' },
+        ],
+      },
+      userinfo: {
+        title: 'Userinfo',
+        description: 'Optional user credentials in the form username:password before the host. Forbidden in HTTP(S) URIs by RFC 9110 §4.2.4 — browsers strip it from Referer and warn on navigation due to phishing risk.',
+        standard: 'RFC 3986 §3.2.1',
+        docs: [
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.1', label: 'RFC 3986', sub: 'Userinfo' },
+          { url: 'https://datatracker.ietf.org/doc/html/rfc9110#section-4.2.4', label: 'RFC 9110', sub: '§4.2.4 Deprecation' },
+        ],
+      },
+      username: {
+        title: 'Username',
+        description: 'The user identifier portion of userinfo. WHATWG exposes it as url.username, percent-encoded. Forbidden for HTTP(S) by RFC 9110.',
+        standard: 'RFC 3986 §3.2.1',
+        docs: [
+          { url: 'https://url.spec.whatwg.org/#dom-url-username', label: 'WHATWG', sub: 'url.username' },
+        ],
+      },
+      password: {
+        title: 'Password',
+        description: 'The credential portion of userinfo, separated from the username by a colon. Already deprecated by RFC 3986 itself; forbidden in HTTP(S) URIs by RFC 9110.',
+        standard: 'RFC 3986 §3.2.1',
+        docs: [
+          { url: 'https://url.spec.whatwg.org/#dom-url-password', label: 'WHATWG', sub: 'url.password' },
+        ],
+      },
+      host: {
+        title: 'Host',
+        description: 'Identifies the server. Three forms: registered name (DNS), IPv4 literal, or IP-literal in brackets (IPv6 / IPvFuture). WHATWG canonicalises it: hostname is lowercased, IPv4 dotted-quad is normalised, IPv6 uses RFC 5952 compression, and IDN labels are converted to Punycode.',
+        standard: 'RFC 3986 §3.2.2',
+        docs: [
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2', label: 'RFC 3986', sub: 'Host' },
+          { url: 'https://datatracker.ietf.org/doc/html/rfc1034', label: 'RFC 1034', sub: 'DNS Concepts' },
+          { url: 'https://url.spec.whatwg.org/#host-parsing', label: 'WHATWG', sub: 'Host parsing' },
+        ],
+      },
+      port: {
+        title: 'Port',
+        description: 'Optional decimal port number after the host. WHATWG omits it when it equals the scheme default (80 for http, 443 for https, 21 for ftp, etc.). The IANA port registry tracks well-known assignments.',
+        standard: 'RFC 3986 §3.2.3',
+        docs: [
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3', label: 'RFC 3986', sub: 'Port' },
+          { url: 'https://www.iana.org/assignments/service-names-port-numbers/', label: 'IANA', sub: 'Port Registry' },
+        ],
+      },
+      path: {
+        title: 'Path',
+        description: 'A sequence of slash-separated segments identifying a resource on the host. For hierarchical schemes WHATWG always begins it with /. Dot-segments (. and ..) have removal semantics. A segment may carry matrix parameters after a semicolon.',
+        standard: 'RFC 3986 §3.3',
+        docs: [
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.3', label: 'RFC 3986', sub: 'Path' },
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-5.2.4', label: 'RFC 3986', sub: '§5.2.4 Dot-segments' },
+        ],
+      },
+      query: {
+        title: 'Query',
+        description: 'A string after the ? delimiter, terminated by # or end-of-string. The familiar key=value&key=value shape is not in RFC 3986 — it is defined by application/x-www-form-urlencoded in the WHATWG URL Standard. & separates pairs, = separates name and value, + means space.',
+        standard: 'RFC 3986 §3.4',
+        docs: [
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.4', label: 'RFC 3986', sub: 'Query' },
+          { url: 'https://url.spec.whatwg.org/#application/x-www-form-urlencoded', label: 'WHATWG', sub: 'form-urlencoded' },
+        ],
+      },
+      queryParam: {
+        title: 'Query Parameter',
+        description: 'A single name/value pair within the query string, in application/x-www-form-urlencoded form. URLSearchParams percent-decodes values automatically; + decodes to space.',
+        standard: 'WHATWG URL §form-urlencoded',
+        docs: [
+          { url: 'https://url.spec.whatwg.org/#urlsearchparams', label: 'WHATWG', sub: 'URLSearchParams' },
+        ],
+      },
+      fragment: {
+        title: 'Fragment',
+        description: 'A reference to a sub-resource of the URL — typically an HTML element id, a media fragment, or SPA route. Strictly client-side: the fragment is never sent to the server in HTTP requests (RFC 9110 §7.1).',
+        standard: 'RFC 3986 §3.5',
+        docs: [
+          { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.5', label: 'RFC 3986', sub: 'Fragment' },
+          { url: 'https://datatracker.ietf.org/doc/html/rfc9110#section-7.1', label: 'RFC 9110', sub: '§7.1 Fragments' },
+        ],
+      },
+    };
+
+    /* ---------- WHATWG parse ---------- */
+    const SPECIAL_SCHEMES = new Set(['http', 'https', 'ws', 'wss', 'ftp', 'file']);
+
+    function parseURL(raw) {
+      const trimmed = raw.trim();
+      if (!trimmed) return { state: 'empty' };
+      let u;
+      try {
+        u = new URL(trimmed);
+      } catch (e) {
+        return { state: 'invalid', input: trimmed, error: String(e.message || e) };
+      }
+
+      const scheme = u.protocol.replace(/:$/, '');
+
+      // Reconstruct raw query pairs from `search` (URLSearchParams iterates decoded;
+      // we keep the raw form for display so the user sees what they typed).
+      const rawPairs = [];
+      if (u.search.length > 1) {
+        for (const pair of u.search.slice(1).split('&')) {
+          if (!pair) continue;
+          const eq = pair.indexOf('=');
+          if (eq < 0) {
+            rawPairs.push({ raw: pair, key: pair, value: '', hasEq: false });
+          } else {
+            rawPairs.push({ raw: pair, key: pair.slice(0, eq), value: pair.slice(eq + 1), hasEq: true });
+          }
+        }
+      }
+
+      return {
+        state: 'ok',
+        scheme,
+        username: u.username,
+        password: u.password,
+        host: u.hostname,           // hostname (no port). Brackets retained for IPv6.
+        port: u.port,               // empty if equal to the scheme default
+        pathname: u.pathname,
+        search: u.search,
+        hash: u.hash,
+        origin: u.origin,
+        isSpecial: SPECIAL_SCHEMES.has(scheme),
+        isOpaque: u.origin === 'null',
+        rawPairs,
+        fragment: u.hash.startsWith('#') ? u.hash.slice(1) : u.hash,
+        href: u.href,
+      };
+    }
+
+    /* ---------- host classification ---------- */
+    function classifyHost(host) {
+      if (!host) return { kind: 'empty' };
+      if (host.startsWith('[')) {
+        const inner = host.slice(1, -1);
+        let addr = inner, zone = '';
+        const pct = inner.indexOf('%25');
+        if (pct >= 0) {
+          addr = inner.slice(0, pct);
+          zone = inner.slice(pct + 3);
+        }
+        return { kind: 'ipv6', addr, zone };
+      }
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return { kind: 'ipv4', addr: host };
+      const labels = host.split('.').filter(Boolean);
+      const isPunycode = labels.some(l => l.toLowerCase().startsWith('xn--'));
+      let tld = '', sld = '', sub = '';
+      if (labels.length >= 2) {
+        tld = labels[labels.length - 1];
+        sld = labels[labels.length - 2];
+        sub = labels.slice(0, -2).join('.');
+      } else {
+        sld = labels[0] || '';
+      }
+      return { kind: 'dns', labels, tld, sld, sub, isPunycode };
+    }
+
+    /* ---------- path segment parsing ---------- */
+    function parsePathSegments(pathname) {
+      if (!pathname) return [];
+      const trimmed = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+      if (!trimmed) return [];
+      return trimmed.split('/').map(seg => {
+        const semi = seg.indexOf(';');
+        if (semi < 0) return { segment: seg, matrix: [] };
+        const name = seg.slice(0, semi);
+        const matrixRaw = seg.slice(semi + 1);
+        const matrix = matrixRaw.split(';').filter(Boolean).map(p => {
+          const eq = p.indexOf('=');
+          return eq < 0 ? { key: p, value: '' } : { key: p.slice(0, eq), value: p.slice(eq + 1) };
+        });
+        return { segment: name, matrix };
+      });
+    }
+
+    /* ---------- DOM helpers ---------- */
+    const breakdownEl = document.getElementById('breakdown');
+
+    function el(tag, props = {}, children = []) {
+      const e = document.createElement(tag);
+      for (const [k, v] of Object.entries(props)) {
+        if (k === 'class') e.className = v;
+        else if (k === 'dataset') Object.assign(e.dataset, v);
+        else if (k === 'style') Object.assign(e.style, v);
+        else if (k in e) e[k] = v;
+        else e.setAttribute(k, v);
+      }
+      for (const c of [].concat(children)) {
+        if (c == null) continue;
+        e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      }
+      return e;
+    }
+
+    function makeRow({ label, value, color, group, dataKey, smaller, hideLabel }) {
+      const row = el('div', { class: 'row', tabIndex: 0, dataset: { key: dataKey, group } });
+      const lab = el('span', {
+        class: 'row-label' + (hideLabel ? ' invisible' : ''),
+        style: { color },
+      }, label);
+      const val = el('div', {
+        class: 'row-value' + (smaller ? ' small' : ''),
+        style: { color },
+      }, value);
+      row.appendChild(lab);
+      row.appendChild(val);
+      return row;
+    }
+
+    function makeSection(label, color) {
+      const sec = el('div', { class: 'section' });
+      const head = el('div', { class: 'section-header' });
+      const tag = el('span', { class: 'section-label', style: { color } }, label);
+      head.appendChild(tag);
+      head.appendChild(el('div', { class: 'section-rule' }));
+      sec.appendChild(head);
+      return sec;
+    }
+
+    /* ---------- render ---------- */
+    function render(parts) {
+      breakdownEl.innerHTML = '';
+
+      if (parts.state === 'empty') {
+        breakdownEl.appendChild(el('div', { class: 'placeholder-msg' },
+          'Type or paste a URL above to see it explode.'));
+        resetInfoPane();
+        return;
+      }
+
+      if (parts.state === 'invalid') {
+        const msg = el('div', { class: 'invalid-msg' });
+        msg.appendChild(el('strong', {}, [
+          (() => {
+            const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            s.setAttribute('width', '18'); s.setAttribute('height', '18');
+            s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none');
+            s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2');
+            s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round');
+            s.innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>';
+            return s;
+          })(),
+          ' That doesn’t look like a valid URL.',
+        ]));
+        msg.appendChild(el('p', {}, [
+          'The WHATWG URL parser rejected it. Make sure it includes a scheme like ',
+          el('code', {}, 'https://'),
+          ' followed by a host. Examples that parse: ',
+          el('code', {}, 'https://example.com'),
+          ', ',
+          el('code', {}, 'mailto:a@b.com'),
+          ', ',
+          el('code', {}, 'urn:isbn:0451450523'),
+          '.',
+        ]));
+        breakdownEl.appendChild(msg);
+        resetInfoPane();
+        return;
+      }
+
+      // -------- Protocol --------
+      const protoSec = makeSection('Protocol', COLOR.protocol);
+      protoSec.appendChild(makeRow({
+        label: 'scheme:', value: parts.scheme, color: COLOR.protocol,
+        group: 'protocol', dataKey: 'scheme',
+      }));
+      breakdownEl.appendChild(protoSec);
+
+      // -------- Authority -------- (userinfo, host, port — all share the authority colour)
+      const hasUser = parts.username !== '' || parts.password !== '';
+      const hasHost = parts.host !== '';
+      const hasPort = parts.port !== '';
+      if (hasUser || hasHost || hasPort) {
+        const sec = makeSection('Authority', COLOR.authority);
+        const grp = el('div', { class: 'group' });
+
+        if (hasUser) {
+          if (parts.username !== '') {
+            grp.appendChild(makeRow({
+              label: 'username:', value: parts.username, color: COLOR.authority,
+              group: 'authority', dataKey: 'username', smaller: true,
+            }));
+          }
+          if (parts.password !== '') {
+            grp.appendChild(makeRow({
+              label: 'password:', value: parts.password, color: COLOR.authority,
+              group: 'authority', dataKey: 'password', smaller: true,
+            }));
+          }
+        }
+
+        if (hasHost) {
+          grp.appendChild(makeRow({
+            label: 'host:', value: parts.host, color: COLOR.authority,
+            group: 'authority', dataKey: 'host',
+          }));
+        }
+
+        if (hasPort) {
+          grp.appendChild(makeRow({
+            label: 'port:', value: parts.port, color: COLOR.authority,
+            group: 'authority', dataKey: 'port', smaller: true,
+          }));
+        }
+
+        sec.appendChild(grp);
+        breakdownEl.appendChild(sec);
+      }
+
+      // -------- Path --------
+      // Skip for special-scheme URLs whose path is just "/" — visually noisy.
+      // Always show for opaque schemes (mailto:, urn:, data:) where the "path" is the body.
+      const showPath = parts.pathname && (parts.isOpaque || parts.pathname !== '/' || (!hasHost && !hasUser));
+      if (showPath) {
+        const sec = makeSection('Path', COLOR.path);
+        sec.appendChild(makeRow({
+          label: 'path:', value: parts.pathname, color: COLOR.path,
+          group: 'path', dataKey: 'path',
+        }));
+        breakdownEl.appendChild(sec);
+      }
+
+      // -------- Query --------
+      if (parts.search !== '') {
+        const sec = makeSection('Query', COLOR.query);
+        const grp = el('div', { class: 'group' });
+        if (parts.rawPairs.length === 0) {
+          // Query exists but is empty after `?` — show raw search
+          grp.appendChild(makeRow({
+            label: 'query:', value: parts.search.slice(1) || '(empty)', color: COLOR.query,
+            group: 'query', dataKey: 'query',
+          }));
+        } else {
+          parts.rawPairs.forEach((p, i) => {
+            grp.appendChild(makeRow({
+              label: 'query:', value: p.raw, color: COLOR.query,
+              group: 'query', dataKey: 'queryParam:' + i, hideLabel: i > 0,
+            }));
+          });
+        }
+        sec.appendChild(grp);
+        breakdownEl.appendChild(sec);
+      }
+
+      // -------- Fragment --------
+      if (parts.hash !== '') {
+        const sec = makeSection('Fragment', COLOR.fragment);
+        sec.appendChild(makeRow({
+          label: 'fragment:', value: parts.fragment || '(empty)', color: COLOR.fragment,
+          group: 'fragment', dataKey: 'fragment',
+        }));
+        breakdownEl.appendChild(sec);
+      }
+
+      attachHoverHandlers(parts);
+
+      // initial info: the first thing in the breakdown
+      const firstRow = breakdownEl.querySelector('.row');
+      if (firstRow) firstRow.dispatchEvent(new Event('mouseenter'));
+    }
+
+    /* ---------- info pane ---------- */
+    const infoBox        = document.getElementById('info-box');
+    const accentBar      = document.getElementById('accent-bar');
+    const infoTitle      = document.getElementById('info-title');
+    const infoValue      = document.getElementById('info-value');
+    const infoDesc       = document.getElementById('info-desc');
+    const infoStandard   = document.getElementById('info-standard');
+    const docLinks       = document.getElementById('doc-links');
+    const structureSec   = document.getElementById('structure-section');
+    const structureLabel = document.getElementById('structure-label');
+    const structureGrid  = document.getElementById('structure-grid');
+
+    function resetInfoPane() {
+      infoBox.style.borderColor = COLOR.protocol;
+      accentBar.style.backgroundColor = COLOR.protocol;
+      infoTitle.textContent = 'Hover a component';
+      infoValue.textContent = '—';
+      infoValue.classList.add('muted');
+      infoDesc.textContent = 'Hover any component on the left to see details, the spec it follows, and links to the relevant RFCs.';
+      infoStandard.textContent = 'RFC 3986 / WHATWG URL';
+      docLinks.innerHTML = '';
+      structureSec.style.display = 'none';
+    }
+
+    function setDocLinks(docs) {
+      docLinks.innerHTML = '';
+      docs.forEach(d => {
+        const a = el('a', {
+          class: 'doc-link', href: d.url, target: '_blank', rel: 'noopener noreferrer',
+        });
+        const icon = el('div', { class: 'doc-link-icon' });
+        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>';
+        const txt = el('span', {}, [d.label, el('small', {}, d.sub)]);
+        a.appendChild(icon);
+        a.appendChild(txt);
+        docLinks.appendChild(a);
+      });
+    }
+
+    function setStructure(label, items) {
+      if (!items || !items.length) {
+        structureSec.style.display = 'none';
+        return;
+      }
+      structureSec.style.display = '';
+      structureLabel.textContent = label;
+      structureGrid.innerHTML = '';
+      items.forEach(it => {
+        const row = el('div', { class: 'breakdown-item' });
+        row.appendChild(el('span', { class: 'badge' }, it.tag));
+        row.appendChild(el('span', { class: 'val' }, it.val));
+        if (it.desc) row.appendChild(el('span', { class: 'desc' }, it.desc));
+        structureGrid.appendChild(row);
+      });
+    }
+
+    function showInfo(kind, parts, ctx = {}) {
+      const meta = INFO[kind] || INFO.scheme;
+      const group = groupForKey[kind] || 'protocol';
+      const color = COLOR[group];
+
+      infoBox.style.borderColor = color;
+      accentBar.style.backgroundColor = color;
+      infoTitle.textContent = meta.title;
+      infoDesc.textContent = meta.description;
+      infoStandard.textContent = meta.standard;
+      setDocLinks(meta.docs);
+      infoValue.classList.remove('muted');
+
+      // Per-component value + structure
+      switch (kind) {
+        case 'scheme': {
+          infoValue.textContent = parts.scheme;
+          const items = [];
+          items.push({ tag: 'TYPE', val: parts.isSpecial ? 'Special scheme' : 'Non-special scheme',
+            desc: parts.isSpecial ? 'Has authority' : 'Often opaque' });
+          if (parts.origin && parts.origin !== 'null') {
+            items.push({ tag: 'ORIGIN', val: parts.origin, desc: 'scheme + host + port' });
+          } else {
+            items.push({ tag: 'ORIGIN', val: 'null', desc: 'opaque origin' });
+          }
+          setStructure('Scheme details', items);
+          break;
+        }
+        case 'username':
+          infoValue.textContent = parts.username;
+          setStructure(null, []);
+          break;
+        case 'password':
+          infoValue.textContent = parts.password;
+          setStructure(null, []);
+          break;
+        case 'host': {
+          infoValue.textContent = parts.host;
+          const c = classifyHost(parts.host);
+          const items = [];
+          if (c.kind === 'dns') {
+            if (c.sub) items.push({ tag: 'SUB', val: c.sub, desc: 'Subdomain' });
+            if (c.sld) items.push({ tag: 'SLD', val: c.sld, desc: 'Second-Level Domain' });
+            if (c.tld) items.push({ tag: 'TLD', val: '.' + c.tld, desc: 'Top-Level Domain' });
+            if (c.isPunycode) items.push({ tag: 'IDN', val: 'Punycode (xn--)', desc: 'RFC 3492 / IDNA 2008' });
+          } else if (c.kind === 'ipv4') {
+            items.push({ tag: 'IPv4', val: c.addr, desc: 'Dotted-quad literal' });
+          } else if (c.kind === 'ipv6') {
+            items.push({ tag: 'IPv6', val: c.addr, desc: 'RFC 5952 form' });
+            if (c.zone) items.push({ tag: 'ZONE', val: c.zone, desc: 'RFC 6874 zone-id' });
+          }
+          if (parts.origin && parts.origin !== 'null') {
+            items.push({ tag: 'ORIGIN', val: parts.origin, desc: 'RFC 6454' });
+          }
+          setStructure('Host structure', items);
+          break;
+        }
+        case 'port': {
+          infoValue.textContent = parts.port;
+          const defaults = { http: '80', https: '443', ws: '80', wss: '443', ftp: '21' };
+          const def = defaults[parts.scheme];
+          const items = [];
+          if (def) items.push({ tag: 'DEFAULT', val: def, desc: `Default for ${parts.scheme}` });
+          items.push({ tag: 'EXPLICIT', val: parts.port, desc: 'As parsed' });
+          setStructure('Port details', items);
+          break;
+        }
+        case 'path': {
+          infoValue.textContent = parts.pathname;
+          const segs = parsePathSegments(parts.pathname);
+          if (segs.length === 0) {
+            setStructure(null, []);
+          } else {
+            const items = [];
+            segs.forEach((s, i) => {
+              items.push({ tag: 'SEG ' + (i + 1), val: s.segment || '(empty)', desc: s.segment === '..' ? 'Dot-segment (parent)' : s.segment === '.' ? 'Dot-segment (self)' : '' });
+              s.matrix.forEach(m => {
+                items.push({ tag: ';', val: m.key + '=' + m.value, desc: 'Matrix param' });
+              });
+            });
+            setStructure('Segments', items);
+          }
+          break;
+        }
+        case 'query': {
+          infoValue.textContent = parts.search;
+          setStructure(null, []);
+          break;
+        }
+        case 'queryParam': {
+          const p = parts.rawPairs[ctx.index];
+          if (!p) break;
+          infoTitle.textContent = `Query: ${p.key}`;
+          infoValue.textContent = p.raw;
+          // Decode for the structure breakdown — URLSearchParams-style
+          const decode = (s) => {
+            try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch { return s; }
+          };
+          const items = [
+            { tag: 'KEY',  val: decode(p.key),   desc: 'Parameter name' },
+            { tag: 'VAL',  val: p.hasEq ? (decode(p.value) || '(empty)') : '(no =)',
+              desc: 'Parameter value' },
+          ];
+          setStructure('Pair', items);
+          break;
+        }
+        case 'fragment': {
+          infoValue.textContent = parts.fragment || '(empty)';
+          setStructure(null, []);
+          break;
+        }
+      }
+
+      document.querySelectorAll('.row.active').forEach(r => r.classList.remove('active'));
+    }
+
+    function attachHoverHandlers(parts) {
+      document.querySelectorAll('.row').forEach(row => {
+        const key = row.dataset.key;
+        const handler = () => {
+          document.querySelectorAll('.row.active').forEach(r => r.classList.remove('active'));
+          row.classList.add('active');
+          if (key.startsWith('queryParam:')) {
+            const idx = parseInt(key.split(':')[1], 10);
+            showInfo('queryParam', parts, { index: idx });
+          } else {
+            showInfo(key, parts);
+          }
+        };
+        row.addEventListener('mouseenter', handler);
+        row.addEventListener('focus', handler);
+      });
+    }
+
+    /* ---------- input wiring ---------- */
+    const input = document.getElementById('url-input');
+
+    function update() { render(parseURL(input.value)); }
+
+    // 'input' covers typing, paste, cut, drag-drop, IME and programmatic changes.
+    // We also wire the others for absolute belt-and-braces.
+    ['input', 'change', 'paste', 'cut', 'drop', 'keyup'].forEach(ev => {
+      input.addEventListener(ev, () => {
+        if (ev === 'paste' || ev === 'drop') setTimeout(update, 0);
+        else update();
+      });
+    });
+
+    update();
+  </script>
+</body>
+</html>
