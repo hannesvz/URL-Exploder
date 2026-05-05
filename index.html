@@ -379,6 +379,27 @@
       opacity: 0.4;
       text-transform: uppercase;
     }
+
+    /* ------- site footer ------- */
+    footer.sitefoot {
+      width: 100%;
+      padding: 1.25rem 1rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-top: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+      background: var(--background);
+    }
+    footer.sitefoot a {
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted-foreground);
+      opacity: 0.5;
+      text-decoration: none;
+      transition: opacity 0.2s ease;
+    }
+    footer.sitefoot a:hover { opacity: 1; }
   </style>
 </head>
 <body>
@@ -404,7 +425,6 @@
       autocorrect="off"
       autocapitalize="off"
       spellcheck="false"
-      value="https://alice:s3cret@cats.example.org.au:1234/stripes/fur.html?pattern=tabby&size=large#claws"
     />
   </header>
 
@@ -438,6 +458,10 @@
       </div>
     </aside>
   </main>
+
+  <footer class="sitefoot">
+    <a href="https://github.com/hannesvz/URL-Exploder" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+  </footer>
 
   <script>
     /* ============================================================
