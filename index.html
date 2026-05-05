@@ -336,6 +336,30 @@
       flex-shrink: 0;
     }
 
+    .cctld-row {
+      display: flex; align-items: center; gap: 1rem;
+      padding: .9rem 1rem;
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+      border: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+      border-radius: .75rem;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+    }
+    .cctld-row .flag {
+      font-size: 1.75rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .cctld-row .country { flex: 1; font-weight: 600; }
+    .cctld-row .cca2 {
+      margin-left: auto;
+      color: var(--muted-foreground);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+
     .info-desc {
       font-size: 1.05rem;
       color: color-mix(in oklab, var(--muted-foreground) 90%, var(--foreground));
@@ -446,6 +470,10 @@
           <div class="info-section" id="structure-section" style="display:none;">
             <span class="label-tiny" id="structure-label">Structure Breakdown</span>
             <div class="breakdown-grid" id="structure-grid"></div>
+          </div>
+          <div class="info-section" id="cctld-section" style="display:none;">
+            <span class="label-tiny">Country-Code TLD</span>
+            <div class="cctld-row" id="cctld-row"></div>
           </div>
           <div>
             <span class="label-tiny">Documentation</span>
@@ -631,6 +659,29 @@
         update(); // re-render once rules are available
       })
       .catch(err => { console.warn('PSL load failed:', err); });
+
+    /* ---------- ccTLD → country (built from restcountries.com + ISO 3166-1, plus IDN ccTLDs) ---------- */
+    const cctlds = { ready: false, byTld: {} };
+    fetch('cctlds.json')
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(data => { cctlds.byTld = data; cctlds.ready = true; update(); })
+      .catch(err => { console.warn('ccTLD list load failed:', err); });
+
+    /* Map an ISO 3166-1 alpha-2 code to its flag emoji (regional indicator pair).
+       Works for two-letter ASCII codes; "EU" renders as the EU flag on most platforms. */
+    function cca2ToFlag(cca2) {
+      if (!cca2 || cca2.length !== 2) return '';
+      const A = 0x1F1E6, base = 'A'.charCodeAt(0);
+      return String.fromCodePoint(A + cca2.charCodeAt(0) - base, A + cca2.charCodeAt(1) - base);
+    }
+
+    /* The PSL match's rightmost label is the actual TLD. If it's a ccTLD, return its country info. */
+    function lookupCcTld(publicSuffix) {
+      if (!publicSuffix) return null;
+      const tld = publicSuffix.split('.').pop();
+      const hit = cctlds.byTld[tld];
+      return hit ? { tld, name: hit.name, cca2: hit.cca2 } : null;
+    }
 
     /* Find the public suffix of a host per the PSL algorithm:
          1. Exception rules (!foo.bar) win — the suffix is rule minus its first label.
@@ -960,6 +1011,8 @@
     const structureSec   = document.getElementById('structure-section');
     const structureLabel = document.getElementById('structure-label');
     const structureGrid  = document.getElementById('structure-grid');
+    const cctldSec       = document.getElementById('cctld-section');
+    const cctldRow       = document.getElementById('cctld-row');
 
     function resetInfoPane() {
       infoBox.style.borderColor = COLOR.protocol;
@@ -971,6 +1024,7 @@
       infoStandard.textContent = 'RFC 3986 / WHATWG URL';
       docLinks.innerHTML = '';
       structureSec.style.display = 'none';
+      cctldSec.style.display = 'none';
     }
 
     function setDocLinks(docs) {
@@ -1005,6 +1059,15 @@
       });
     }
 
+    function setCctld(info) {
+      if (!info) { cctldSec.style.display = 'none'; return; }
+      cctldSec.style.display = '';
+      cctldRow.innerHTML = '';
+      cctldRow.appendChild(el('span', { class: 'flag' }, cca2ToFlag(info.cca2)));
+      cctldRow.appendChild(el('span', { class: 'country' }, info.name));
+      cctldRow.appendChild(el('span', { class: 'cca2' }, '.' + info.tld + ' · ' + info.cca2));
+    }
+
     function showInfo(kind, parts, ctx = {}) {
       const meta = INFO[kind] || INFO.scheme;
       const group = groupForKey[kind] || 'protocol';
@@ -1017,6 +1080,7 @@
       infoStandard.textContent = meta.standard;
       setDocLinks(meta.docs);
       infoValue.classList.remove('muted');
+      setCctld(null); // reset; only the host case populates it
 
       // Per-component value + structure
       switch (kind) {
@@ -1048,7 +1112,7 @@
           if (c.kind === 'dns') {
             if (c.sub)          items.push({ tag: 'SUB',  val: c.sub,                desc: 'Subdomain' });
             if (c.apex)         items.push({ tag: 'APEX', val: c.apex,               desc: 'Registrable domain' });
-            if (c.publicSuffix) items.push({ tag: 'PSL',  val: '.' + c.publicSuffix,
+            if (c.publicSuffix) items.push({ tag: 'PSL',  val: c.publicSuffix,
               desc: c.pslReady ? 'Public suffix' : 'TLD (PSL loading…)' });
             if (c.isPunycode)   items.push({ tag: 'IDN',  val: 'Punycode (xn--)',    desc: 'RFC 3492 / IDNA 2008' });
           } else if (c.kind === 'ipv4') {
@@ -1061,6 +1125,7 @@
             items.push({ tag: 'ORIGIN', val: parts.origin, desc: 'RFC 6454' });
           }
           setStructure('Host structure', items);
+          if (c.kind === 'dns') setCctld(lookupCcTld(c.publicSuffix));
           break;
         }
         case 'port': {
