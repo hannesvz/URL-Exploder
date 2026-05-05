@@ -542,11 +542,12 @@
       },
       host: {
         title: 'Host',
-        description: 'Identifies the server. Three forms: registered name (DNS), IPv4 literal, or IP-literal in brackets (IPv6 / IPvFuture). WHATWG canonicalises it: hostname is lowercased, IPv4 dotted-quad is normalised, IPv6 uses RFC 5952 compression, and IDN labels are converted to Punycode.',
+        description: 'Identifies the server. Three forms: registered name (DNS), IPv4 literal, or IP-literal in brackets (IPv6 / IPvFuture). WHATWG canonicalises it: hostname is lowercased, IPv4 dotted-quad is normalised, IPv6 uses RFC 5952 compression, and IDN labels are converted to Punycode. The DNS breakdown uses Mozilla’s Public Suffix List to find the registrable boundary — the apex domain (what someone actually registered) sits one label below the public suffix, with everything to its left being subdomain.',
         standard: 'RFC 3986 §3.2.2',
         docs: [
           { url: 'https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2', label: 'RFC 3986', sub: 'Host' },
           { url: 'https://datatracker.ietf.org/doc/html/rfc1034', label: 'RFC 1034', sub: 'DNS Concepts' },
+          { url: 'https://publicsuffix.org/', label: 'Mozilla', sub: 'Public Suffix List' },
           { url: 'https://url.spec.whatwg.org/#host-parsing', label: 'WHATWG', sub: 'Host parsing' },
         ],
       },
@@ -598,6 +599,66 @@
 
     /* ---------- WHATWG parse ---------- */
     const SPECIAL_SCHEMES = new Set(['http', 'https', 'ws', 'wss', 'ftp', 'file']);
+
+    /* ---------- Public Suffix List ---------- */
+    /* Loaded once at startup from psl.dat (Mozilla / publicsuffix.org).
+       Used to find the registrable boundary in DNS hosts so we can label
+       subdomain / apex / public-suffix / TLD correctly. */
+    const psl = { ready: false, exact: new Set(), wildcard: new Set(), exception: new Set() };
+
+    function ingestPSLLine(raw) {
+      let rule = raw.trim().toLowerCase();
+      if (!rule) return;
+      // Normalise IDN entries to punycode so they can match URL.hostname directly.
+      if (/[^\x00-\x7f]/.test(rule)) {
+        let prefix = '';
+        let body = rule;
+        if (body.startsWith('!')) { prefix = '!'; body = body.slice(1); }
+        else if (body.startsWith('*.')) { prefix = '*.'; body = body.slice(2); }
+        try { rule = prefix + new URL('http://' + body).hostname; }
+        catch { return; }
+      }
+      if (rule.startsWith('!')) psl.exception.add(rule.slice(1));
+      else if (rule.startsWith('*.')) psl.wildcard.add(rule.slice(2));
+      else psl.exact.add(rule);
+    }
+
+    fetch('psl.dat')
+      .then(r => r.ok ? r.text() : Promise.reject(r.status))
+      .then(text => {
+        for (const line of text.split('\n')) ingestPSLLine(line);
+        psl.ready = true;
+        update(); // re-render once rules are available
+      })
+      .catch(err => { console.warn('PSL load failed:', err); });
+
+    /* Find the public suffix of a host per the PSL algorithm:
+         1. Exception rules (!foo.bar) win — the suffix is rule minus its first label.
+         2. Otherwise the longest matching rule wins (exact or *.parent).
+         3. If nothing matches, the default rule "*" applies — TLD is the suffix. */
+    function findPublicSuffix(host) {
+      if (!host) return '';
+      const labels = host.toLowerCase().split('.');
+      for (let i = 0; i < labels.length; i++) {
+        if (psl.exception.has(labels.slice(i).join('.'))) {
+          return labels.slice(i + 1).join('.');
+        }
+      }
+      let bestLen = 0;
+      for (let i = 0; i < labels.length; i++) {
+        if (psl.exact.has(labels.slice(i).join('.'))) {
+          bestLen = Math.max(bestLen, labels.length - i);
+        }
+      }
+      for (let i = 0; i < labels.length - 1; i++) {
+        if (psl.wildcard.has(labels.slice(i + 1).join('.'))) {
+          bestLen = Math.max(bestLen, labels.length - i);
+        }
+      }
+      if (bestLen === 0) bestLen = 1;
+      if (bestLen > labels.length) bestLen = labels.length;
+      return labels.slice(labels.length - bestLen).join('.');
+    }
 
     function parseURL(raw) {
       const trimmed = raw.trim();
@@ -661,15 +722,27 @@
       if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return { kind: 'ipv4', addr: host };
       const labels = host.split('.').filter(Boolean);
       const isPunycode = labels.some(l => l.toLowerCase().startsWith('xn--'));
-      let tld = '', sld = '', sub = '';
-      if (labels.length >= 2) {
-        tld = labels[labels.length - 1];
-        sld = labels[labels.length - 2];
-        sub = labels.slice(0, -2).join('.');
+
+      // Resolve the registrable boundary using the Public Suffix List once it's loaded.
+      // Before then, fall back to the last-two-labels heuristic so something sensible
+      // renders during the brief window before psl.dat arrives.
+      let publicSuffix = '', apex = '', sub = '';
+      if (psl.ready) {
+        publicSuffix = findPublicSuffix(host);
+        const sufCount = publicSuffix ? publicSuffix.split('.').length : 0;
+        if (labels.length > sufCount) {
+          apex = labels.slice(labels.length - sufCount - 1).join('.');
+          sub  = labels.slice(0, labels.length - sufCount - 1).join('.');
+        }
+        // else: the host *is* a public suffix — no registrable domain exists.
+      } else if (labels.length >= 2) {
+        publicSuffix = labels[labels.length - 1];
+        apex = labels.slice(-2).join('.');
+        sub  = labels.slice(0, -2).join('.');
       } else {
-        sld = labels[0] || '';
+        publicSuffix = labels[0] || '';
       }
-      return { kind: 'dns', labels, tld, sld, sub, isPunycode };
+      return { kind: 'dns', labels, publicSuffix, apex, sub, isPunycode, pslReady: psl.ready };
     }
 
     /* ---------- path segment parsing ---------- */
@@ -973,10 +1046,11 @@
           const c = classifyHost(parts.host);
           const items = [];
           if (c.kind === 'dns') {
-            if (c.sub) items.push({ tag: 'SUB', val: c.sub, desc: 'Subdomain' });
-            if (c.sld) items.push({ tag: 'SLD', val: c.sld, desc: 'Second-Level Domain' });
-            if (c.tld) items.push({ tag: 'TLD', val: '.' + c.tld, desc: 'Top-Level Domain' });
-            if (c.isPunycode) items.push({ tag: 'IDN', val: 'Punycode (xn--)', desc: 'RFC 3492 / IDNA 2008' });
+            if (c.sub)          items.push({ tag: 'SUB',  val: c.sub,                desc: 'Subdomain' });
+            if (c.apex)         items.push({ tag: 'APEX', val: c.apex,               desc: 'Registrable domain' });
+            if (c.publicSuffix) items.push({ tag: 'PSL',  val: '.' + c.publicSuffix,
+              desc: c.pslReady ? 'Public suffix' : 'TLD (PSL loading…)' });
+            if (c.isPunycode)   items.push({ tag: 'IDN',  val: 'Punycode (xn--)',    desc: 'RFC 3492 / IDNA 2008' });
           } else if (c.kind === 'ipv4') {
             items.push({ tag: 'IPv4', val: c.addr, desc: 'Dotted-quad literal' });
           } else if (c.kind === 'ipv6') {
