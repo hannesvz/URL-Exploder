@@ -8,4 +8,4 @@ Useful for quickly inspecting a complex URL, teaching the URL spec, or just sati
 
 ## License
 
-Released under [The Unlicense](LICENSE) — public domain, do whatever you like with it.
+Released under [The Unlicense](LICENSE) - public domain, do whatever you like with it.
